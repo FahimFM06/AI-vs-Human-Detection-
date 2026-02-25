@@ -1,13 +1,10 @@
 # ============================================================
 # Streamlit App: AI vs Human Text Detection (BiLSTM + LIME)
-# - Page 1: Guide + How it works (Bk1 background)
-# - Page 2: Prediction platform + LIME explanation (Bk2 background)
-# Navigation: Continue / Back buttons (no sidebar needed)
+# - Page 1: Hero + Guide (Bk1 background)
+# - Page 2: Platform (Bk2 background)
+# Improved readability: overlay + strong glass cards + typography
 # ============================================================
 
-# ------------------------------
-# Import libraries
-# ------------------------------
 import streamlit as st
 import numpy as np
 import tensorflow as tf
@@ -22,14 +19,10 @@ import streamlit.components.v1 as components
 # ------------------------------
 # App config
 # ------------------------------
-st.set_page_config(
-    page_title="AI vs Human Detection",
-    page_icon="🧠",
-    layout="wide"
-)
+st.set_page_config(page_title="AI vs Human Detection", page_icon="🧠", layout="wide")
 
 # ------------------------------
-# Paths (relative to GitHub repo)
+# Paths (relative to repo)
 # ------------------------------
 APP_DIR = Path(__file__).resolve().parent
 MODEL_PATH = APP_DIR / "advanced_bilstm_model.keras"
@@ -37,15 +30,12 @@ TOKENIZER_PATH = APP_DIR / "tokenizer_word2vec.pkl"
 BK1_PATH = APP_DIR / "Bk1.png"
 BK2_PATH = APP_DIR / "Bk2.png"
 
-# ------------------------------
-# Must match your training sequence length
-# ------------------------------
-MAX_LEN = 300
+MAX_LEN = 300  # must match training
 
 # ------------------------------
-# Helper: set background image with CSS
+# Background with dark overlay + theme CSS
 # ------------------------------
-def set_background(image_path: Path):
+def set_background(image_path: Path, overlay_alpha: float = 0.70):
     if not image_path.exists():
         st.warning(f"Background image not found: {image_path.name}")
         return
@@ -56,6 +46,7 @@ def set_background(image_path: Path):
     st.markdown(
         f"""
         <style>
+        /* Full app background image */
         .stApp {{
             background-image: url("data:image/png;base64,{encoded}");
             background-size: cover;
@@ -63,30 +54,95 @@ def set_background(image_path: Path):
             background-attachment: fixed;
         }}
 
-        /* Make default text color bright for readability */
-        html, body, [class*="css"]  {{
+        /* Dark overlay to improve readability */
+        .stApp::before {{
+            content: "";
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, {overlay_alpha});
+            z-index: 0;
+        }}
+
+        /* Ensure all content stays above overlay */
+        section[data-testid="stMain"] > div {{
+            position: relative;
+            z-index: 1;
+        }}
+
+        /* Global typography */
+        h1, h2, h3, h4 {{
             color: #ffffff !important;
+            text-shadow: 0px 2px 14px rgba(0,0,0,0.75);
+            letter-spacing: 0.2px;
         }}
 
-        /* Make text areas and inputs readable */
-        textarea, input {{
-            color: #000000 !important;
+        p, li, span, div {{
+            color: #EDEDED !important;
+            font-size: 16px;
         }}
 
-        /* Nice translucent container panel */
+        /* Strong glass card */
         .glass {{
-            background: rgba(0, 0, 0, 0.55);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 18px;
-            padding: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+            background: rgba(15, 15, 18, 0.78);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 22px;
+            padding: 28px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+            backdrop-filter: blur(10px);
         }}
 
-        /* Button styling */
-        .stButton>button {{
-            border-radius: 12px;
-            padding: 0.6rem 1.2rem;
-            font-weight: 600;
+        /* Hero header style */
+        .hero-title {{
+            font-size: 44px;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }}
+
+        .hero-sub {{
+            font-size: 18px;
+            opacity: 0.95;
+            margin-top: 0;
+        }}
+
+        /* Section label pills */
+        .pill {{
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.10);
+            border: 1px solid rgba(255,255,255,0.14);
+            font-size: 13px;
+            margin-bottom: 10px;
+        }}
+
+        /* Make text area readable */
+        textarea {{
+            color: #000 !important;
+            background: rgba(255,255,255,0.95) !important;
+            border-radius: 14px !important;
+        }}
+
+        /* Buttons */
+        .stButton > button {{
+            border-radius: 14px;
+            padding: 0.65rem 1.2rem;
+            font-weight: 700;
+            border: 1px solid rgba(255,255,255,0.22);
+            background: linear-gradient(90deg, rgba(80,120,255,0.85), rgba(140,80,255,0.85));
+            color: white !important;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+        }}
+        .stButton > button:hover {{
+            transform: translateY(-1px);
+            transition: 0.15s ease;
+        }}
+
+        /* Tables look better on dark */
+        [data-testid="stTable"] {{
+            background: rgba(15, 15, 18, 0.65) !important;
+            border-radius: 16px;
+            padding: 10px;
+            border: 1px solid rgba(255,255,255,0.12);
         }}
         </style>
         """,
@@ -94,7 +150,7 @@ def set_background(image_path: Path):
     )
 
 # ------------------------------
-# Load model + tokenizer once
+# Load model + tokenizer
 # ------------------------------
 @st.cache_resource
 def load_artifacts():
@@ -108,8 +164,7 @@ def load_artifacts():
     return model, tokenizer
 
 # ------------------------------
-# Predict probabilities
-# Returns: array (n,2) => [P(Human), P(AI)]
+# Prediction function -> returns [P(Human), P(AI)]
 # ------------------------------
 def predict_proba(text_list, model, tokenizer):
     seqs = tokenizer.texts_to_sequences(text_list)
@@ -119,97 +174,87 @@ def predict_proba(text_list, model, tokenizer):
     return np.vstack([human_probs, ai_probs]).T
 
 # ------------------------------
-# Session state for simple page navigation
+# Session state navigation
 # ------------------------------
 if "page" not in st.session_state:
-    st.session_state.page = 1  # start at page 1
+    st.session_state.page = 1
 
 # ============================================================
-# PAGE 1: GUIDE + SUMMARY (Bk1)
+# PAGE 1
 # ============================================================
 if st.session_state.page == 1:
-    set_background(BK1_PATH)
+    set_background(BK1_PATH, overlay_alpha=0.72)
 
-    st.markdown('<div class="glass">', unsafe_allow_html=True)
+    # Centered hero card
+    left, mid, right = st.columns([1, 2.2, 1])
+    with mid:
+        st.markdown('<div class="glass">', unsafe_allow_html=True)
 
-    st.title("🧠 AI vs Human Text Detection")
-    st.write(
-        """
-        Welcome! This app predicts whether a text is **Human-written** or **AI-generated** using a trained **BiLSTM** model.
-        It also provides **Explainable AI** using **LIME**, so you can see which words influenced the prediction.
-        """
-    )
+        st.markdown('<div class="pill">BiLSTM • Word2Vec Tokenizer • LIME Explainability</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hero-title">🧠 AI vs Human Text Detection</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hero-sub">Paste any text and get a prediction with word-level explanations showing <b>why</b> the model decided.</div>',
+            unsafe_allow_html=True
+        )
 
-    st.subheader("✅ How to use this app")
-    st.markdown(
-        """
-        1. Click **Continue** to open the Detection Platform.  
-        2. Paste your text into the input box.  
-        3. Click **Predict & Explain**.  
-        4. You will see:
-           - Prediction label (Human / AI)
-           - Confidence score
-           - LIME explanation (important words + visual explanation)
-        """
-    )
+        st.markdown("---")
 
-    st.subheader("⚙️ How this system works (short)")
-    st.markdown(
-        """
-        - **Tokenizer (Word2Vec-based)** converts words into integer IDs.  
-        - Text is padded/truncated to **300 tokens**.  
-        - **BiLSTM** outputs the probability of **AI (1)**.  
-        - **LIME** highlights the words that most influenced the output.
-        """
-    )
+        st.subheader("✅ How to use this app")
+        st.markdown(
+            """
+            1. Click **Continue** to open the Detection Platform.  
+            2. Paste your text into the input box.  
+            3. Click **Predict & Explain**.  
+            4. View prediction + confidence + LIME explanation.
+            """
+        )
 
-    st.subheader("📌 Classes")
-    st.markdown(
-        """
-        - **Human = 0**  
-        - **AI = 1**
-        """
-    )
+        st.subheader("⚙️ How it works")
+        st.markdown(
+            """
+            - **Tokenizer** converts words → integer IDs (same mapping as training).  
+            - Text is padded/truncated to **300 tokens**.  
+            - **BiLSTM** outputs probability of **AI (1)**.  
+            - **LIME** highlights the words that most influenced the decision.  
+            """
+        )
 
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("➡️ Continue"):
-            st.session_state.page = 2
-            st.rerun()
+        st.subheader("📌 Labels")
+        st.markdown("- **Human = 0**  \n- **AI = 1**")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        c1, c2 = st.columns([1, 3])
+        with c1:
+            if st.button("➡️ Continue"):
+                st.session_state.page = 2
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# PAGE 2: PLATFORM (Bk2)
+# PAGE 2
 # ============================================================
-elif st.session_state.page == 2:
-    set_background(BK2_PATH)
+else:
+    set_background(BK2_PATH, overlay_alpha=0.70)
 
-    # Load model/tokenizer safely
     try:
         model, tokenizer = load_artifacts()
     except Exception as e:
-        st.error("Could not load model/tokenizer. Ensure these files exist in your GitHub repo root:")
+        st.error("Could not load model/tokenizer. Ensure these files exist in the repo root:")
         st.code("advanced_bilstm_model.keras\ntokenizer_word2vec.pkl\nBk1.png\nBk2.png")
         st.exception(e)
         st.stop()
 
+    # Wider platform card
     st.markdown('<div class="glass">', unsafe_allow_html=True)
 
     st.title("🧪 Detection Platform")
-    st.write("Paste text below to classify it and view LIME explanations.")
+    st.write("Paste your text below. The app will predict **Human vs AI** and explain the decision using **LIME**.")
 
-    user_text = st.text_area(
-        "Enter text here:",
-        height=200,
-        placeholder="Paste a paragraph here..."
-    )
+    user_text = st.text_area("Enter text here:", height=220, placeholder="Paste a paragraph here...")
 
-    colA, colB = st.columns([1, 1])
-
+    colA, colB, colC = st.columns([1.2, 1, 3])
     with colA:
         run_btn = st.button("✅ Predict & Explain")
-
     with colB:
         if st.button("⬅️ Back"):
             st.session_state.page = 1
@@ -218,37 +263,40 @@ elif st.session_state.page == 2:
     if run_btn:
         if user_text.strip() == "":
             st.warning("Please enter some text first.")
-            st.stop()
-
-        probs = predict_proba([user_text], model, tokenizer)[0]
-        p_human, p_ai = float(probs[0]), float(probs[1])
-
-        if p_ai >= 0.5:
-            label = "AI-generated"
-            confidence = p_ai
         else:
-            label = "Human-written"
-            confidence = p_human
+            probs = predict_proba([user_text], model, tokenizer)[0]
+            p_human, p_ai = float(probs[0]), float(probs[1])
 
-        st.subheader("📌 Prediction")
-        st.write(f"**Label:** {label}")
-        st.write(f"**Confidence:** {confidence:.4f}")
-        st.write(f"**P(Human):** {p_human:.4f}   |   **P(AI):** {p_ai:.4f}")
+            if p_ai >= 0.5:
+                label = "AI-generated"
+                confidence = p_ai
+            else:
+                label = "Human-written"
+                confidence = p_human
 
-        st.subheader("🔍 Explainable AI (LIME)")
-        explainer = LimeTextExplainer(class_names=["Human", "AI"])
-
-        with st.spinner("Generating LIME explanation..."):
-            exp = explainer.explain_instance(
-                user_text,
-                lambda texts: predict_proba(texts, model, tokenizer),
-                num_features=15
+            st.subheader("📌 Prediction")
+            st.markdown(
+                f"""
+                **Label:** `{label}`  
+                **Confidence:** `{confidence:.4f}`  
+                **P(Human):** `{p_human:.4f}`  |  **P(AI):** `{p_ai:.4f}`
+                """
             )
 
-        st.subheader("🧾 Top Important Words")
-        st.table([{"word": w, "weight": float(s)} for w, s in exp.as_list()])
+            st.subheader("🔍 Explainable AI (LIME)")
+            explainer = LimeTextExplainer(class_names=["Human", "AI"])
 
-        st.subheader("🧠 LIME Visual Explanation")
-        components.html(exp.as_html(), height=450, scrolling=True)
+            with st.spinner("Generating explanation..."):
+                exp = explainer.explain_instance(
+                    user_text,
+                    lambda texts: predict_proba(texts, model, tokenizer),
+                    num_features=15
+                )
+
+            st.subheader("🧾 Top Important Words")
+            st.table([{"word": w, "weight": float(s)} for w, s in exp.as_list()])
+
+            st.subheader("🧠 LIME Visual Explanation")
+            components.html(exp.as_html(), height=500, scrolling=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
