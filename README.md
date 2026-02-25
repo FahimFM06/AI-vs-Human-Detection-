@@ -3,6 +3,12 @@
 
 ---
 
+## 🔗 Live Demo (Streamlit App)
+
+👉 https://kgtalyuz6zshlndvzgzzqz.streamlit.app/
+
+---
+
 ## 📌 Project Overview
 
 This project builds an **AI vs Human text detection system** using deep learning and explainable AI.  
