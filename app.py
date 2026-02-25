@@ -1,7 +1,8 @@
 # ============================================================
 # Streamlit App: AI vs Human Text Detection (BiLSTM + LIME)
-# - Page 1: Summary (How it works)
-# - Page 2: Platform (Predict + Explain)
+# - Page 1: Guide + How it works (Bk1 background)
+# - Page 2: Prediction platform + LIME explanation (Bk2 background)
+# Navigation: Continue / Back buttons (no sidebar needed)
 # ============================================================
 
 # ------------------------------
@@ -12,26 +13,29 @@ import numpy as np
 import tensorflow as tf
 import joblib
 from pathlib import Path
+import base64
 
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from lime.lime_text import LimeTextExplainer
 import streamlit.components.v1 as components
 
 # ------------------------------
-# Streamlit page config
+# App config
 # ------------------------------
 st.set_page_config(
-    page_title="AI vs Human Text Detection",
+    page_title="AI vs Human Detection",
     page_icon="🧠",
     layout="wide"
 )
 
 # ------------------------------
-# Resolve paths RELATIVE to this app.py file (works on Streamlit Cloud)
+# Paths (relative to GitHub repo)
 # ------------------------------
-APP_DIR = Path(__file__).resolve().parent  # folder where app.py is located
+APP_DIR = Path(__file__).resolve().parent
 MODEL_PATH = APP_DIR / "advanced_bilstm_model.keras"
 TOKENIZER_PATH = APP_DIR / "tokenizer_word2vec.pkl"
+BK1_PATH = APP_DIR / "Bk1.png"
+BK2_PATH = APP_DIR / "Bk2.png"
 
 # ------------------------------
 # Must match your training sequence length
@@ -39,128 +43,186 @@ TOKENIZER_PATH = APP_DIR / "tokenizer_word2vec.pkl"
 MAX_LEN = 300
 
 # ------------------------------
-# Load model + tokenizer once (cached)
+# Helper: set background image with CSS
+# ------------------------------
+def set_background(image_path: Path):
+    if not image_path.exists():
+        st.warning(f"Background image not found: {image_path.name}")
+        return
+
+    img_bytes = image_path.read_bytes()
+    encoded = base64.b64encode(img_bytes).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/png;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+
+        /* Make default text color bright for readability */
+        html, body, [class*="css"]  {{
+            color: #ffffff !important;
+        }}
+
+        /* Make text areas and inputs readable */
+        textarea, input {{
+            color: #000000 !important;
+        }}
+
+        /* Nice translucent container panel */
+        .glass {{
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }}
+
+        /* Button styling */
+        .stButton>button {{
+            border-radius: 12px;
+            padding: 0.6rem 1.2rem;
+            font-weight: 600;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# ------------------------------
+# Load model + tokenizer once
 # ------------------------------
 @st.cache_resource
 def load_artifacts():
-    # Check model file exists
     if not MODEL_PATH.exists():
         raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-
-    # Check tokenizer file exists
     if not TOKENIZER_PATH.exists():
         raise FileNotFoundError(f"Tokenizer file not found: {TOKENIZER_PATH}")
 
-    # Load BiLSTM model
     model = tf.keras.models.load_model(str(MODEL_PATH))
-
-    # Load tokenizer
     tokenizer = joblib.load(TOKENIZER_PATH)
-
     return model, tokenizer
 
 # ------------------------------
-# Predict probabilities for LIME + UI
-# Returns: array (n,2) -> [P(Human), P(AI)]
+# Predict probabilities
+# Returns: array (n,2) => [P(Human), P(AI)]
 # ------------------------------
 def predict_proba(text_list, model, tokenizer):
-    # Convert raw text -> integer sequences
     seqs = tokenizer.texts_to_sequences(text_list)
-
-    # Pad/truncate sequences
     padded = pad_sequences(seqs, maxlen=MAX_LEN, padding="post", truncating="post")
-
-    # Model outputs probability of AI (class 1)
     ai_probs = model.predict(padded, verbose=0).reshape(-1)
-
-    # Convert to 2-class probabilities
     human_probs = 1.0 - ai_probs
-
-    # Return [Human, AI]
     return np.vstack([human_probs, ai_probs]).T
 
 # ------------------------------
-# Sidebar navigation
+# Session state for simple page navigation
 # ------------------------------
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["1) Project Summary", "2) Detection Platform"])
+if "page" not in st.session_state:
+    st.session_state.page = 1  # start at page 1
 
 # ============================================================
-# PAGE 1: SUMMARY
+# PAGE 1: GUIDE + SUMMARY (Bk1)
 # ============================================================
-if page == "1) Project Summary":
-    st.title("🧠 AI vs Human Text Detection (BiLSTM + LIME Explainability)")
+if st.session_state.page == 1:
+    set_background(BK1_PATH)
 
+    st.markdown('<div class="glass">', unsafe_allow_html=True)
+
+    st.title("🧠 AI vs Human Text Detection")
     st.write(
         """
-        This project detects whether a text is **Human-written** or **AI-generated** using a trained **BiLSTM** model.
-        It also uses **LIME (Explainable AI)** to highlight which words influenced the decision.
+        Welcome! This app predicts whether a text is **Human-written** or **AI-generated** using a trained **BiLSTM** model.
+        It also provides **Explainable AI** using **LIME**, so you can see which words influenced the prediction.
         """
     )
 
-    st.subheader("Workflow")
+    st.subheader("✅ How to use this app")
     st.markdown(
         """
-        1. **Input Text** → user pastes a paragraph  
-        2. **Tokenizer** → converts words into integer IDs (same mapping used during training)  
-        3. **Padding** → sequences padded/truncated to fixed length (**300 tokens**)  
-        4. **BiLSTM Prediction** → outputs probability of AI text  
-        5. **LIME Explanation** → shows important words contributing to the prediction  
+        1. Click **Continue** to open the Detection Platform.  
+        2. Paste your text into the input box.  
+        3. Click **Predict & Explain**.  
+        4. You will see:
+           - Prediction label (Human / AI)
+           - Confidence score
+           - LIME explanation (important words + visual explanation)
         """
     )
 
-    st.subheader("Classes")
+    st.subheader("⚙️ How this system works (short)")
     st.markdown(
         """
-        - **Human = 0**
+        - **Tokenizer (Word2Vec-based)** converts words into integer IDs.  
+        - Text is padded/truncated to **300 tokens**.  
+        - **BiLSTM** outputs the probability of **AI (1)**.  
+        - **LIME** highlights the words that most influenced the output.
+        """
+    )
+
+    st.subheader("📌 Classes")
+    st.markdown(
+        """
+        - **Human = 0**  
         - **AI = 1**
         """
     )
 
-    st.subheader("What the platform shows")
-    st.markdown(
-        """
-        - Predicted label (Human / AI)  
-        - Confidence score  
-        - Word importance list (LIME)  
-        - Visual explanation (LIME HTML)  
-        """
-    )
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("➡️ Continue"):
+            st.session_state.page = 2
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# PAGE 2: PLATFORM
+# PAGE 2: PLATFORM (Bk2)
 # ============================================================
-elif page == "2) Detection Platform":
-    st.title("🧪 Detection Platform")
-    st.write("Paste text below to classify it and see the LIME explanation.")
+elif st.session_state.page == 2:
+    set_background(BK2_PATH)
 
-    # Load artifacts safely
+    # Load model/tokenizer safely
     try:
         model, tokenizer = load_artifacts()
     except Exception as e:
-        st.error("Could not load model/tokenizer. Make sure these files exist in your GitHub repo root:")
-        st.code("advanced_bilstm_model.keras\ntokenizer_word2vec.pkl")
+        st.error("Could not load model/tokenizer. Ensure these files exist in your GitHub repo root:")
+        st.code("advanced_bilstm_model.keras\ntokenizer_word2vec.pkl\nBk1.png\nBk2.png")
         st.exception(e)
         st.stop()
 
-    # Text input
+    st.markdown('<div class="glass">', unsafe_allow_html=True)
+
+    st.title("🧪 Detection Platform")
+    st.write("Paste text below to classify it and view LIME explanations.")
+
     user_text = st.text_area(
         "Enter text here:",
         height=200,
         placeholder="Paste a paragraph here..."
     )
 
-    # Run prediction button
-    if st.button("Predict & Explain"):
+    colA, colB = st.columns([1, 1])
+
+    with colA:
+        run_btn = st.button("✅ Predict & Explain")
+
+    with colB:
+        if st.button("⬅️ Back"):
+            st.session_state.page = 1
+            st.rerun()
+
+    if run_btn:
         if user_text.strip() == "":
             st.warning("Please enter some text first.")
             st.stop()
 
-        # Predict
         probs = predict_proba([user_text], model, tokenizer)[0]
         p_human, p_ai = float(probs[0]), float(probs[1])
 
-        # Decide label
         if p_ai >= 0.5:
             label = "AI-generated"
             confidence = p_ai
@@ -168,14 +230,12 @@ elif page == "2) Detection Platform":
             label = "Human-written"
             confidence = p_human
 
-        # Display prediction
-        st.subheader("Prediction")
+        st.subheader("📌 Prediction")
         st.write(f"**Label:** {label}")
         st.write(f"**Confidence:** {confidence:.4f}")
         st.write(f"**P(Human):** {p_human:.4f}   |   **P(AI):** {p_ai:.4f}")
 
-        # LIME explanation
-        st.subheader("Explainable AI (LIME)")
+        st.subheader("🔍 Explainable AI (LIME)")
         explainer = LimeTextExplainer(class_names=["Human", "AI"])
 
         with st.spinner("Generating LIME explanation..."):
@@ -185,10 +245,10 @@ elif page == "2) Detection Platform":
                 num_features=15
             )
 
-        # Show top words
-        st.subheader("Top Important Words")
+        st.subheader("🧾 Top Important Words")
         st.table([{"word": w, "weight": float(s)} for w, s in exp.as_list()])
 
-        # Show LIME visualization
-        st.subheader("LIME Visual Explanation")
+        st.subheader("🧠 LIME Visual Explanation")
         components.html(exp.as_html(), height=450, scrolling=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
