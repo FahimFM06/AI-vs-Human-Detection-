@@ -1,8 +1,4 @@
-# ============================================================
-# Streamlit App: AI vs Human Text Detection (BiLSTM + LIME)
-# Page 1: Clean glass sections (as your screenshot)
-# Page 2: Water/Aqua glass style (NO white boxes)
-# ============================================================
+
 
 import streamlit as st
 import numpy as np
@@ -15,14 +11,8 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from lime.lime_text import LimeTextExplainer
 import streamlit.components.v1 as components
 
-# ------------------------------
-# App config
-# ------------------------------
 st.set_page_config(page_title="AI vs Human Detection", page_icon="🧠", layout="wide")
 
-# ------------------------------
-# Paths (repo root)
-# ------------------------------
 APP_DIR = Path(__file__).resolve().parent
 MODEL_PATH = APP_DIR / "advanced_bilstm_model.keras"
 TOKENIZER_PATH = APP_DIR / "tokenizer_word2vec.pkl"
@@ -30,6 +20,7 @@ BK1_PATH = APP_DIR / "Bk1.png"
 BK2_PATH = APP_DIR / "Bk2.png"
 
 MAX_LEN = 300
+
 
 # ------------------------------
 # Background + CSS theme
@@ -62,22 +53,21 @@ def set_background(image_path: Path, overlay_alpha: float = 0.72):
             z-index: 1;
         }}
 
-        /* global text */
         h1,h2,h3,h4 {{ color:#ffffff !important; text-shadow:0 2px 14px rgba(0,0,0,.75); }}
         p,li,span,div {{ color:#F1F1F1 !important; font-size:16px; }}
 
-        /* page 1 section blocks (clean) */
+        /* Page 1 section blocks */
         .section {{
             background: rgba(10, 12, 16, 0.68);
             border: 1px solid rgba(255,255,255,0.14);
             border-radius: 18px;
-            padding: 18px 18px;
+            padding: 18px;
             margin: 12px 0px;
             box-shadow: 0 10px 28px rgba(0,0,0,0.35);
             backdrop-filter: blur(10px);
         }}
 
-        /* page 2 water / aqua glass */
+        /* Page 2 water blocks */
         .water {{
             background: rgba(0, 30, 45, 0.62);
             border: 1px solid rgba(120, 220, 255, 0.25);
@@ -88,25 +78,14 @@ def set_background(image_path: Path, overlay_alpha: float = 0.72):
             backdrop-filter: blur(14px);
         }}
 
-        /* headings label style */
-        .tag {{
-            display:inline-block;
-            padding: 6px 12px;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(255,255,255,0.10);
-            font-size: 13px;
-            margin-bottom: 10px;
-        }}
-
-        /* input box */
+        /* Textbox */
         textarea {{
             color:#0b0d10 !important;
             background: rgba(255,255,255,0.92) !important;
             border-radius: 14px !important;
         }}
 
-        /* buttons */
+        /* Buttons */
         .stButton > button {{
             border-radius: 14px;
             padding: 0.65rem 1.2rem;
@@ -117,7 +96,7 @@ def set_background(image_path: Path, overlay_alpha: float = 0.72):
             box-shadow: 0 10px 24px rgba(0,0,0,0.35);
         }}
 
-        /* tables */
+        /* Table style */
         [data-testid="stTable"] {{
             background: rgba(0, 25, 40, 0.45) !important;
             border-radius: 16px;
@@ -125,11 +104,23 @@ def set_background(image_path: Path, overlay_alpha: float = 0.72):
             border: 1px solid rgba(120, 220, 255, 0.18);
         }}
 
-        iframe {{ width: 100% !important; }}
+        /* ✅ LIME viewer (white like your screenshot) */
+        .lime-white {{
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 18px;
+            padding: 14px;
+            border: 1px solid rgba(0,0,0,0.15);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+        }}
+
+        iframe {{
+            width: 100% !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True
     )
+
 
 # ------------------------------
 # Load model + tokenizer
@@ -140,13 +131,13 @@ def load_artifacts():
         raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
     if not TOKENIZER_PATH.exists():
         raise FileNotFoundError(f"Tokenizer file not found: {TOKENIZER_PATH}")
-
     model = tf.keras.models.load_model(str(MODEL_PATH))
     tokenizer = joblib.load(TOKENIZER_PATH)
     return model, tokenizer
 
+
 # ------------------------------
-# Prediction proba -> [Human, AI]
+# Predict probabilities -> [Human, AI]
 # ------------------------------
 def predict_proba(text_list, model, tokenizer):
     seqs = tokenizer.texts_to_sequences(text_list)
@@ -155,51 +146,34 @@ def predict_proba(text_list, model, tokenizer):
     human_probs = 1.0 - ai_probs
     return np.vstack([human_probs, ai_probs]).T
 
+
 # ------------------------------
-# Make LIME HTML "water theme" (NO white)
+# Make LIME HTML readable (force white bg + black text)
 # ------------------------------
-def make_lime_html_water(html: str) -> str:
-    water_css = """
+def lime_html_force_white(html: str) -> str:
+    css = """
     <style>
-      body {
-        background: #06141c !important;
-        color: #eaf6ff !important;
-        font-size: 16px !important;
-        font-family: Arial, sans-serif !important;
-      }
-      * { color: #eaf6ff !important; }
-      h1,h2,h3,h4 { color: #ffffff !important; }
+      body { background:#ffffff !important; color:#111111 !important; font-family: Arial, sans-serif !important; }
+      * { color:#111111 !important; }
+      text { fill:#111111 !important; }
+      table { font-size: 14px !important; }
       .lime { max-width: 100% !important; }
-
-      /* tables */
-      table, th, td {
-        background: rgba(0, 30, 45, 0.55) !important;
-        border-color: rgba(120, 220, 255, 0.25) !important;
-      }
-
-      /* chart labels */
-      text { fill: #eaf6ff !important; }
-
-      /* highlighted words: make them brighter */
-      span {
-        font-weight: 800 !important;
-        border-radius: 6px !important;
-        padding: 1px 3px !important;
-      }
     </style>
     """
     if "<head>" in html:
-        return html.replace("<head>", "<head>" + water_css)
-    return water_css + html
+        return html.replace("<head>", "<head>" + css)
+    return css + html
+
 
 # ------------------------------
-# Navigation state
+# Navigation
 # ------------------------------
 if "page" not in st.session_state:
     st.session_state.page = 1
 
+
 # ============================================================
-# PAGE 1 (like your screenshot)
+# PAGE 1
 # ============================================================
 if st.session_state.page == 1:
     set_background(BK1_PATH, overlay_alpha=0.78)
@@ -233,30 +207,26 @@ if st.session_state.page == 1:
     st.subheader("⚙️ How the model works (easy)")
     st.markdown(
         """
-        - The **Tokenizer** converts words → numbers (IDs).  
-        - We pad the text to **300 tokens** so the model always gets the same input size.  
-        - The **BiLSTM** learns writing patterns and outputs probability of **AI (1)**.  
-        - **LIME** highlights the words that pushed the prediction toward Human or AI.  
+        - Tokenizer converts words → numbers (IDs).  
+        - Text padded to **300 tokens**.  
+        - BiLSTM outputs probability of **AI (1)**.  
+        - LIME highlights the words that influence the prediction.  
         """
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="section">', unsafe_allow_html=True)
     st.subheader("🏷️ Labels")
-    st.markdown(
-        """
-        - Human = 0  
-        - AI = 1  
-        """
-    )
+    st.markdown("- Human = 0  \n- AI = 1")
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("➡️ Continue"):
         st.session_state.page = 2
         st.rerun()
 
+
 # ============================================================
-# PAGE 2 (Water/Aqua style + readable)
+# PAGE 2
 # ============================================================
 else:
     set_background(BK2_PATH, overlay_alpha=0.74)
@@ -283,7 +253,6 @@ else:
         if st.button("⬅️ Back"):
             st.session_state.page = 1
             st.rerun()
-
     st.markdown("</div>", unsafe_allow_html=True)
 
     if run_btn:
@@ -307,7 +276,6 @@ else:
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # LIME
             explainer = LimeTextExplainer(class_names=["Human", "AI"])
             with st.spinner("Generating explanation..."):
                 exp = explainer.explain_instance(
@@ -321,8 +289,10 @@ else:
             st.table([{"word": w, "weight": float(s)} for w, s in exp.as_list()])
             st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown('<div class="water">', unsafe_allow_html=True)
+            # ✅ This will look like your screenshot
             st.subheader("🧠 LIME Visual Explanation")
-            lime_html = make_lime_html_water(exp.as_html())
-            components.html(lime_html, height=650, scrolling=True)
+            lime_html = lime_html_force_white(exp.as_html())
+
+            st.markdown('<div class="lime-white">', unsafe_allow_html=True)
+            components.html(lime_html, height=620, scrolling=True)
             st.markdown("</div>", unsafe_allow_html=True)
