@@ -1,7 +1,7 @@
 # ============================================================
 # Streamlit App: AI vs Human Text Detection (BiLSTM + LIME)
-# Page 1: Clean guide (keep like your screenshot)
-# Page 2: "Water / frosted glass" style so all text is visible (white text)
+# Page 1: Clean glass sections (as your screenshot)
+# Page 2: Water/Aqua glass style (NO white boxes)
 # ============================================================
 
 import streamlit as st
@@ -21,7 +21,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="AI vs Human Detection", page_icon="🧠", layout="wide")
 
 # ------------------------------
-# Paths
+# Paths (repo root)
 # ------------------------------
 APP_DIR = Path(__file__).resolve().parent
 MODEL_PATH = APP_DIR / "advanced_bilstm_model.keras"
@@ -29,138 +29,110 @@ TOKENIZER_PATH = APP_DIR / "tokenizer_word2vec.pkl"
 BK1_PATH = APP_DIR / "Bk1.png"
 BK2_PATH = APP_DIR / "Bk2.png"
 
-MAX_LEN = 300  # must match training
+MAX_LEN = 300
 
 # ------------------------------
-# Background + CSS
-# mode="page1" or "page2"
+# Background + CSS theme
 # ------------------------------
-def set_background(image_path: Path, mode: str = "page1"):
+def set_background(image_path: Path, overlay_alpha: float = 0.72):
     if not image_path.exists():
         st.warning(f"Background image not found: {image_path.name}")
         return
 
     encoded = base64.b64encode(image_path.read_bytes()).decode()
 
-    # Page 1 overlay is simple dark
-    if mode == "page1":
-        overlay = "rgba(0,0,0,0.72)"
-
-    # Page 2 overlay has "water" effect (gradient + blur look)
-    else:
-        overlay = """
-        linear-gradient(120deg,
-            rgba(10, 25, 45, 0.78),
-            rgba(18, 40, 65, 0.74),
-            rgba(5, 20, 30, 0.76)
-        )
-        """
-
     st.markdown(
         f"""
         <style>
-        /* Background image */
         .stApp {{
             background-image: url("data:image/png;base64,{encoded}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
         }}
-
-        /* Overlay layer */
         .stApp::before {{
             content: "";
             position: fixed;
             inset: 0;
-            background: {overlay};
+            background: rgba(0, 0, 0, {overlay_alpha});
             z-index: 0;
         }}
-
-        /* Ensure content stays above overlay */
         section[data-testid="stMain"] > div {{
             position: relative;
             z-index: 1;
         }}
 
-        /* Headings */
-        h1,h2,h3,h4 {{
-            color: #ffffff !important;
-            text-shadow: 0 2px 14px rgba(0,0,0,0.75);
+        /* global text */
+        h1,h2,h3,h4 {{ color:#ffffff !important; text-shadow:0 2px 14px rgba(0,0,0,.75); }}
+        p,li,span,div {{ color:#F1F1F1 !important; font-size:16px; }}
+
+        /* page 1 section blocks (clean) */
+        .section {{
+            background: rgba(10, 12, 16, 0.68);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 18px;
+            padding: 18px 18px;
+            margin: 12px 0px;
+            box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+            backdrop-filter: blur(10px);
         }}
 
-        /* Default text */
-        p, li, span, div {{
-            color: #F3F6FF !important;
-            font-size: 16px;
-        }}
-
-        /* Page 1: clean transparent separators */
-        .line {{
-            height: 1px;
-            background: rgba(255,255,255,0.18);
-            margin: 14px 0;
-            border-radius: 999px;
-        }}
-
-        /* Page 2: water / frosted glass card */
-        .water-card {{
-            background: rgba(255, 255, 255, 0.10);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 22px;
-            padding: 24px;
-            box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+        /* page 2 water / aqua glass */
+        .water {{
+            background: rgba(0, 30, 45, 0.62);
+            border: 1px solid rgba(120, 220, 255, 0.25);
+            border-radius: 20px;
+            padding: 22px;
+            margin: 12px 0px;
+            box-shadow: 0 12px 38px rgba(0,0,0,0.45);
             backdrop-filter: blur(14px);
         }}
 
-        /* Buttons */
+        /* headings label style */
+        .tag {{
+            display:inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.10);
+            font-size: 13px;
+            margin-bottom: 10px;
+        }}
+
+        /* input box */
+        textarea {{
+            color:#0b0d10 !important;
+            background: rgba(255,255,255,0.92) !important;
+            border-radius: 14px !important;
+        }}
+
+        /* buttons */
         .stButton > button {{
             border-radius: 14px;
             padding: 0.65rem 1.2rem;
             font-weight: 800;
-            border: 1px solid rgba(255,255,255,0.20);
-            background: linear-gradient(90deg, rgba(50,160,255,0.85), rgba(120,90,255,0.85));
-            color: #fff !important;
-            box-shadow: 0 10px 22px rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.22);
+            background: linear-gradient(90deg, rgba(40,160,255,0.9), rgba(0,220,200,0.85));
+            color: white !important;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.35);
         }}
 
-        /* Text area readable */
-        textarea {{
-            color: #0A0A0A !important;
-            background: rgba(255,255,255,0.96) !important;
-            border-radius: 14px !important;
-        }}
-
-        /* Make iframe full width */
-        iframe {{
-            width: 100% !important;
-        }}
-
-        /* On page 2: make Streamlit tables LIGHT with dark text */
+        /* tables */
         [data-testid="stTable"] {{
-            background: rgba(255,255,255,0.92) !important;
-            border-radius: 14px;
+            background: rgba(0, 25, 40, 0.45) !important;
+            border-radius: 16px;
             padding: 10px;
-            border: 1px solid rgba(0,0,0,0.10);
-        }}
-        [data-testid="stTable"] * {{
-            color: #111111 !important;
+            border: 1px solid rgba(120, 220, 255, 0.18);
         }}
 
-        /* LIME viewer white box (always readable) */
-        .lime-viewer {{
-            background: rgba(255,255,255,0.98);
-            border-radius: 16px;
-            padding: 14px;
-            border: 1px solid rgba(0,0,0,0.10);
-            box-shadow: 0 10px 28px rgba(0,0,0,0.25);
-        }}
+        iframe {{ width: 100% !important; }}
         </style>
         """,
         unsafe_allow_html=True
     )
 
 # ------------------------------
-# Load artifacts
+# Load model + tokenizer
 # ------------------------------
 @st.cache_resource
 def load_artifacts():
@@ -174,7 +146,7 @@ def load_artifacts():
     return model, tokenizer
 
 # ------------------------------
-# Predict probabilities -> [P(Human), P(AI)]
+# Prediction proba -> [Human, AI]
 # ------------------------------
 def predict_proba(text_list, model, tokenizer):
     seqs = tokenizer.texts_to_sequences(text_list)
@@ -184,20 +156,41 @@ def predict_proba(text_list, model, tokenizer):
     return np.vstack([human_probs, ai_probs]).T
 
 # ------------------------------
-# Fix LIME html readability inside iframe
+# Make LIME HTML "water theme" (NO white)
 # ------------------------------
-def make_lime_html_readable(html: str) -> str:
-    css = """
+def make_lime_html_water(html: str) -> str:
+    water_css = """
     <style>
-      body { background: #ffffff !important; color: #111 !important; font-size: 16px !important; }
-      * { color: #111 !important; font-family: Arial, sans-serif !important; }
-      table { font-size: 14px !important; }
-      text { fill: #111 !important; }
+      body {
+        background: #06141c !important;
+        color: #eaf6ff !important;
+        font-size: 16px !important;
+        font-family: Arial, sans-serif !important;
+      }
+      * { color: #eaf6ff !important; }
+      h1,h2,h3,h4 { color: #ffffff !important; }
+      .lime { max-width: 100% !important; }
+
+      /* tables */
+      table, th, td {
+        background: rgba(0, 30, 45, 0.55) !important;
+        border-color: rgba(120, 220, 255, 0.25) !important;
+      }
+
+      /* chart labels */
+      text { fill: #eaf6ff !important; }
+
+      /* highlighted words: make them brighter */
+      span {
+        font-weight: 800 !important;
+        border-radius: 6px !important;
+        padding: 1px 3px !important;
+      }
     </style>
     """
     if "<head>" in html:
-        return html.replace("<head>", "<head>" + css)
-    return css + html
+        return html.replace("<head>", "<head>" + water_css)
+    return water_css + html
 
 # ------------------------------
 # Navigation state
@@ -206,15 +199,15 @@ if "page" not in st.session_state:
     st.session_state.page = 1
 
 # ============================================================
-# PAGE 1 (keep like your screenshot)
+# PAGE 1 (like your screenshot)
 # ============================================================
 if st.session_state.page == 1:
-    set_background(BK1_PATH, mode="page1")
+    set_background(BK1_PATH, overlay_alpha=0.78)
 
     st.title("🧠 AI vs Human Text Detection")
-    st.write("Type or paste any text — the app will predict **Human** or **AI**, and then show the exact words that influenced the decision.")
-    st.markdown('<div class="line"></div>', unsafe_allow_html=True)
+    st.write("Type or paste any text — the app will predict Human or AI, and then show the exact words that influenced the decision.")
 
+    st.markdown('<div class="section">', unsafe_allow_html=True)
     st.subheader("🚀 What you can do here")
     st.markdown(
         """
@@ -223,8 +216,9 @@ if st.session_state.page == 1:
         ✅ Use Explainable AI (LIME) to understand why the model decided  
         """
     )
-    st.markdown('<div class="line"></div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="section">', unsafe_allow_html=True)
     st.subheader("🧭 How to use (3 simple steps)")
     st.markdown(
         """
@@ -233,8 +227,9 @@ if st.session_state.page == 1:
         3. Click **Predict & Explain**  
         """
     )
-    st.markdown('<div class="line"></div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="section">', unsafe_allow_html=True)
     st.subheader("⚙️ How the model works (easy)")
     st.markdown(
         """
@@ -244,20 +239,27 @@ if st.session_state.page == 1:
         - **LIME** highlights the words that pushed the prediction toward Human or AI.  
         """
     )
-    st.markdown('<div class="line"></div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="section">', unsafe_allow_html=True)
     st.subheader("🏷️ Labels")
-    st.markdown("- Human = 0  \n- AI = 1")
+    st.markdown(
+        """
+        - Human = 0  
+        - AI = 1  
+        """
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("➡️ Continue"):
         st.session_state.page = 2
         st.rerun()
 
 # ============================================================
-# PAGE 2 (water / frosted glass style + white text)
+# PAGE 2 (Water/Aqua style + readable)
 # ============================================================
 else:
-    set_background(BK2_PATH, mode="page2")
+    set_background(BK2_PATH, overlay_alpha=0.74)
 
     try:
         model, tokenizer = load_artifacts()
@@ -266,12 +268,12 @@ else:
         st.exception(e)
         st.stop()
 
-    # Water-style card container
-    st.markdown('<div class="water-card">', unsafe_allow_html=True)
-
+    st.markdown('<div class="water">', unsafe_allow_html=True)
     st.title("🧪 Detection Platform")
-    st.write("Paste your text below — you’ll get prediction, confidence, and LIME explanation.")
+    st.write("Paste your text below. You’ll get a prediction + confidence + explanation (LIME).")
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    st.markdown('<div class="water">', unsafe_allow_html=True)
     user_text = st.text_area("Enter text here:", height=220, placeholder="Paste a paragraph here...")
 
     colA, colB = st.columns([1, 1])
@@ -281,6 +283,8 @@ else:
         if st.button("⬅️ Back"):
             st.session_state.page = 1
             st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if run_btn:
         if user_text.strip() == "":
@@ -292,6 +296,7 @@ else:
             label = "AI-generated" if p_ai >= 0.5 else "Human-written"
             confidence = p_ai if p_ai >= 0.5 else p_human
 
+            st.markdown('<div class="water">', unsafe_allow_html=True)
             st.subheader("📌 Prediction")
             st.markdown(
                 f"""
@@ -300,10 +305,10 @@ else:
                 **P(Human):** `{p_human:.4f}`  |  **P(AI):** `{p_ai:.4f}`
                 """
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            st.subheader("🧾 Top Important Words (LIME)")
+            # LIME
             explainer = LimeTextExplainer(class_names=["Human", "AI"])
-
             with st.spinner("Generating explanation..."):
                 exp = explainer.explain_instance(
                     user_text,
@@ -311,15 +316,13 @@ else:
                     num_features=15
                 )
 
-            # This table is now forced to light background + dark text via CSS
+            st.markdown('<div class="water">', unsafe_allow_html=True)
+            st.subheader("🧾 Top Important Words")
             st.table([{"word": w, "weight": float(s)} for w, s in exp.as_list()])
-
-            st.subheader("🧠 LIME Visual Explanation")
-            lime_html = make_lime_html_readable(exp.as_html())
-
-            # White panel for LIME HTML
-            st.markdown('<div class="lime-viewer">', unsafe_allow_html=True)
-            components.html(lime_html, height=650, scrolling=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div class="water">', unsafe_allow_html=True)
+            st.subheader("🧠 LIME Visual Explanation")
+            lime_html = make_lime_html_water(exp.as_html())
+            components.html(lime_html, height=650, scrolling=True)
+            st.markdown("</div>", unsafe_allow_html=True)
